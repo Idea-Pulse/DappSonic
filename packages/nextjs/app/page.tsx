@@ -290,7 +290,7 @@ const Home: NextPage = () => {
               transition={{ delay: 0.2 }}
               className="[&>a]:!w-full [&>a>div]:!w-full [&>a]:h-full [&>a>div]:h-full"
             >
-              <ContractProjectCard projectId={4} />
+              <ContractProjectCard projectId={2} />
             </motion.div>
             <motion.div
               initial={{ opacity: 0, y: 50 }}
@@ -298,7 +298,7 @@ const Home: NextPage = () => {
               transition={{ delay: 0.4 }}
               className="[&>a]:!w-full [&>a>div]:!w-full [&>a]:h-full [&>a>div]:h-full"
             >
-              <ContractProjectCard projectId={5} />
+              <ContractProjectCard projectId={3} />
             </motion.div>
           </div>
 

@@ -14,7 +14,7 @@ const ProjectsContent = () => {
   const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
 
   // Create an array of project IDs for rendering ContractProjectCard
-  const projectIds = [3, 4, 5];
+  const projectIds = [1, 2, 3];
 
   return (
     <div className="flex flex-col pt-16 min-h-screen animate-fade-in">

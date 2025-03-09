@@ -12,8 +12,8 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-eth/contract";
  * } as const;
  */
 const externalContracts = {
-  // Arbitrum Sepolia
-  10143: {
+  // Sonic Blaze Testnet
+  57054: {
     MockUSDC: {
       address: "0x3856Eee08189d63c9DBd1D415789566Cc87357f5",
       abi: [

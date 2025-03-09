@@ -134,13 +134,8 @@
   transform: translateY(-2px);
 }
 
-.network-badge.monad {
-  background: linear-gradient(135deg, #ff6b6b, #ff8e53);
-  color: white;
-}
-
 .network-badge.flow {
-  background: linear-gradient(135deg, #00ef8b, #00b8d9);
+  background: linear-gradient(135deg, #00ef8b, #00ef8b);
   color: white;
 }
 

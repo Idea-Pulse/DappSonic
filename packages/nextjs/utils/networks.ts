@@ -1,34 +1,26 @@
 import { defineChain } from "viem";
 
-export const monadTestnet = defineChain({
-  id: 10_143,
-  name: "Monad Testnet",
-  network: "monad-testnet",
+export const sonicBlazeTestnet = defineChain({
+  id: 57054,
+  name: "Sonic Blaze Testnet",
+  network: "sonic-blaze-testnet",
   nativeCurrency: {
     decimals: 18,
-    name: "Monad",
-    symbol: "MON",
+    name: "Sonic",
+    symbol: "S",
   },
   rpcUrls: {
     default: {
-      http: ["https://testnet-rpc.monad.xyz"],
-      webSocket: ["wss://testnet-rpc.monad.xyz/ws"],
+      http: ["https://rpc.blaze.soniclabs.com"],
     },
     public: {
-      http: ["https://testnet-rpc.monad.xyz"],
-      webSocket: ["wss://testnet-rpc.monad.xyz/ws"],
+      http: ["https://rpc.blaze.soniclabs.com"],
     },
   },
   blockExplorers: {
     default: {
-      name: "Monad Explorer",
-      url: "https://testnet.monadexplorer.com",
-    },
-  },
-  contracts: {
-    multicall3: {
-      address: "0xcA11bde05977b3631167028862bE2a173976CA11",
-      blockCreated: 1234,
+      name: "Sonic Blaze Explorer",
+      url: "https://testnet.sonicscan.org",
     },
   },
 });
