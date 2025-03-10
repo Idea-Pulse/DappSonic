@@ -6,14 +6,14 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        "primary-light": "#4F46E5", // 深邃的靛蓝色
-        "primary-dark": "#8B5CF6", // 明亮的紫色
-        "secondary-light": "#06B6D4", // 科技青色
-        "secondary-dark": "#3B82F6", // 电光蓝
-        "accent-light": "#10B981", // 明亮的翠绿色
-        "accent-dark": "#14F195", // 霓虹绿
-        "neutral-light": "#1E293B", // 深蓝灰
-        "neutral-dark": "#334155", // 中蓝灰
+        "primary-light": "#4F46E5", // Deep indigo blue
+        "primary-dark": "#8B5CF6", // Bright purple
+        "secondary-light": "#06B6D4", // Tech cyan
+        "secondary-dark": "#3B82F6", // Electric blue
+        "accent-light": "#10B981", // Bright emerald green
+        "accent-dark": "#14F195", // Neon green
+        "neutral-light": "#1E293B", // Deep blue-gray
+        "neutral-dark": "#334155", // Medium blue-gray
       },
       animation: {
         "fade-in": "fadeIn 0.5s ease-in-out",
@@ -86,26 +86,26 @@ module.exports = {
     themes: [
       {
         light: {
-          primary: "#4F46E5", // 深邃的靛蓝色
-          secondary: "#06B6D4", // 科技青色
-          accent: "#10B981", // 翠绿色
-          neutral: "#1E293B", // 深蓝灰
+          primary: "#4F46E5", // Deep indigo blue
+          secondary: "#06B6D4", // Tech cyan
+          accent: "#10B981", // Emerald green
+          neutral: "#1E293B", // Deep blue-gray
           "base-100": "#ffffff",
           "base-200": "#F8FAFC",
           "base-300": "#F1F5F9",
-          info: "#3B82F6", // 电光蓝
+          info: "#3B82F6", // Electric blue
           success: "#22c55e",
           warning: "#f59e0b",
           error: "#ef4444",
         },
         dark: {
-          primary: "#8B5CF6", // 明亮的紫色
-          secondary: "#3B82F6", // 电光蓝
-          accent: "#14F195", // 霓虹绿
-          neutral: "#334155", // 中蓝灰
-          "base-100": "#0F172A", // 深蓝黑
-          "base-200": "#1E293B", // 更深的蓝灰
-          "base-300": "#334155", // 中蓝灰
+          primary: "#8B5CF6", // Bright purple
+          secondary: "#3B82F6", // Electric blue
+          accent: "#14F195", // Neon green
+          neutral: "#334155", // Medium blue-gray
+          "base-100": "#0F172A", // Deep blue-black
+          "base-200": "#1E293B", // Deeper blue-gray
+          "base-300": "#334155", // Medium blue-gray
           info: "#60A5FA",
           success: "#34d399",
           warning: "#fbbf24",

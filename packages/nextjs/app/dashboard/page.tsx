@@ -80,6 +80,17 @@ type ReleaseScheduleItem = {
   isUnlocked: boolean; // Whether it's unlocked
 };
 
+// Investment status distribution type
+type InvestmentStatusDistribution = {
+  active: number;
+  funded: number;
+  failed: number;
+  pending: number;
+};
+
+// Tag distribution type
+type TagDistribution = Record<string, number>;
+
 // Cache object
 interface Cache {
   projects: Record<number, ProjectData>;
@@ -167,178 +178,7 @@ const isCacheExpired = (): boolean => {
 };
 
 // User investments table component
-const UserInvestmentsTable = () => {
-  const { address } = useAccount();
-  const { readMethod, isLoading } = useContractRead();
-  const [userInvestments, setUserInvestments] = useState<UserInvestment[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-
-  // Get user contributions (project IDs)
-  const getUserContributions = useCallback(async (userAddress: string): Promise<number[]> => {
-    // Check cache
-    const cacheKey = userAddress;
-    if (!isCacheExpired() && globalCache.userContributions[cacheKey]) {
-      console.log("Using cached user contributions");
-      return globalCache.userContributions[cacheKey];
-    }
-
-    // Fetch data from blockchain
-    const projectIds = await readMethod("getUserContributions", [userAddress]);
-    
-    if (projectIds && Array.isArray(projectIds)) {
-      const numericIds = projectIds.map(id => Number(id));
-      // Update cache
-      globalCache.userContributions[cacheKey] = numericIds;
-      globalCache.timestamp = Date.now();
-      return numericIds;
-    }
-    
-    return [];
-  }, [readMethod]);
-
-  // Get project information
-  const getProject = useCallback(async (projectId: number): Promise<ProjectData | null> => {
-    // Check cache
-    if (!isCacheExpired() && globalCache.projects[projectId]) {
-      console.log(`Using cached project data for ID ${projectId}`);
-      return globalCache.projects[projectId];
-    }
-
-    // Fetch data from blockchain
-    const projectResult = await readMethod("getProject", [projectId]);
-    
-    if (projectResult) {
-      const project = parseProjectData(projectResult as any[]);
-      // Update cache
-      globalCache.projects[projectId] = project;
-      globalCache.timestamp = Date.now();
-      return project;
-    }
-    
-    return null;
-  }, [readMethod]);
-
-  // Get user's contribution for a project
-  const getContribution = useCallback(async (projectId: number, userAddress: string): Promise<bigint> => {
-    // Check cache
-    const cacheKey = `${projectId}-${userAddress}`;
-    if (!isCacheExpired() && globalCache.contributions[cacheKey]) {
-      console.log(`Using cached contribution for project ${projectId}`);
-      return globalCache.contributions[cacheKey];
-    }
-
-    // Fetch data from blockchain
-    const contributionResult = await readMethod("getContribution", [projectId, userAddress]);
-    
-    if (contributionResult) {
-      const amount = BigInt(contributionResult.toString());
-      // Update cache
-      globalCache.contributions[cacheKey] = amount;
-      globalCache.timestamp = Date.now();
-      return amount;
-    }
-    
-    return 0n;
-  }, [readMethod]);
-
-  // Get project funding information
-  const getFundingInfo = useCallback(async (projectId: number): Promise<FundingInfo | null> => {
-    // Check cache
-    if (!isCacheExpired() && globalCache.fundingInfo[projectId]) {
-      console.log(`Using cached funding info for project ${projectId}`);
-      return globalCache.fundingInfo[projectId];
-    }
-
-    // Fetch data from blockchain
-    const fundingResult = await readMethod("getFundingInfo", [projectId]);
-    
-    if (fundingResult) {
-      const fundingInfo = parseFundingInfo(fundingResult as any[]);
-      // Update cache
-      globalCache.fundingInfo[projectId] = fundingInfo;
-      globalCache.timestamp = Date.now();
-      return fundingInfo;
-    }
-    
-    return null;
-  }, [readMethod]);
-
-  useEffect(() => {
-    const fetchUserInvestments = async () => {
-      if (!address || isLoading) return;
-      
-      setIsLoadingData(true);
-      
-      try {
-        // Get user contributions (project IDs)
-        const projectIds = await getUserContributions(address);
-        
-        if (projectIds.length === 0) {
-          setUserInvestments([]);
-          setIsLoadingData(false);
-          return;
-        }
-        
-        // Get detailed information for each project
-        const investmentsPromises = projectIds.map(async (projectId) => {
-          // Fetch project data, contribution amount, and funding info in parallel
-          const [project, contributionAmount, fundingInfo] = await Promise.all([
-            getProject(projectId),
-            getContribution(projectId, address),
-            getFundingInfo(projectId)
-          ]);
-          
-          // Determine project status
-          let status = "Unknown";
-          let fundingGoal = 0n;
-          let raisedAmount = 0n;
-          let fundingProgress = 0;
-          
-          if (fundingInfo) {
-            fundingGoal = fundingInfo.fundingGoal;
-            raisedAmount = fundingInfo.raisedAmount;
-            
-            // Calculate crowdfunding progress percentage
-            fundingProgress = fundingGoal > 0n 
-              ? Number((raisedAmount * 100n) / fundingGoal)
-              : 0;
-            
-            const now = new Date();
-            const endDate = new Date(fundingInfo.endTime * 1000);
-            
-            if (fundingInfo.hasMetFundingGoal) {
-              status = "Funded";
-            } else if (now > endDate) {
-              status = "Expired";
-            } else {
-              status = "Active";
-            }
-          }
-          
-          return {
-            projectId,
-            projectTitle: project ? project.title : `Project #${projectId}`,
-            contributionAmount,
-            status,
-            fundingGoal,
-            raisedAmount,
-            fundingProgress
-          };
-        });
-        
-        const investments = await Promise.all(investmentsPromises);
-        setUserInvestments(investments);
-      } catch (error) {
-        console.error("Failed to fetch user investments:", error);
-        setUserInvestments([]);
-      } finally {
-        setIsLoadingData(false);
-      }
-    };
-    
-    fetchUserInvestments();
-  }, [address, isLoading, getUserContributions, getProject, getContribution, getFundingInfo]);
-  
+const UserInvestmentsTable = ({ userInvestments, isLoadingData }: { userInvestments: UserInvestment[], isLoadingData: boolean }) => {
   if (isLoadingData) {
     return (
       <div className="flex justify-center items-center py-8">
@@ -415,7 +255,9 @@ const UserInvestmentsTable = () => {
                   href={`/projects/${investment.projectId}`}
                   className="btn btn-xs sm:btn-sm btn-outline"
                 >
-                  Details
+                  <div className="flex items-center justify-center h-full">
+                    <span className="inline-block">Details</span>
+                  </div>
                 </Link>
               </td>
             </tr>
@@ -427,11 +269,175 @@ const UserInvestmentsTable = () => {
 };
 
 // Token unlock progress component
-const TokenReleaseSchedule = () => {
-  const { address } = useAccount();
-  const { readMethod, isLoading } = useContractRead();
+const TokenReleaseSchedule = ({ tokenReleaseInfo, isLoadingData }: { tokenReleaseInfo: TokenReleaseInfo[], isLoadingData: boolean }) => {
+  if (isLoadingData) {
+    return (
+      <div className="flex justify-center items-center py-8">
+        <span className="loading loading-spinner loading-lg"></span>
+      </div>
+    );
+  }
+  
+  if (tokenReleaseInfo.length === 0) {
+    return (
+      <div className="py-6 text-center rounded-lg sm:py-8 bg-base-200/50">
+        <h3 className="mb-2 text-lg font-bold sm:text-xl">No token releases yet</h3>
+        <p className="mb-4 text-xs opacity-80 sm:text-sm">You don&apos;t have any tokens being released.</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-4">
+      {/* Token unlock progress table */}
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <table className="table w-full table-sm sm:table-md">
+          <thead>
+            <tr>
+              <th className="text-xs sm:text-sm">Release Date</th>
+              <th className="text-xs sm:text-sm">Project</th>
+              <th className="text-xs sm:text-sm">Percentage</th>
+              <th className="text-xs sm:text-sm">Tokens</th>
+              <th className="text-xs sm:text-sm">Status</th>
+              <th className="text-xs sm:text-sm">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tokenReleaseInfo.map((info) => (
+              <tr key={`${info.projectId}-${info.vestingStartDate}`}>
+                <td className="text-xs sm:text-sm">
+                  {new Date(info.vestingEndDate * 1000).toLocaleDateString()}
+                </td>
+                <td>
+                  <div className="font-medium text-xs sm:text-sm truncate max-w-[100px] sm:max-w-none">
+                    {info.projectTitle}
+                  </div>
+                </td>
+                <td className="text-xs sm:text-sm">
+                  <div className="flex items-center gap-2">
+                    <progress 
+                      className="progress w-16 sm:w-20" 
+                      value={info.percentUnlocked} 
+                      max="100"
+                    ></progress>
+                    <span className="text-xs">{info.percentUnlocked}%</span>
+                  </div>
+                </td>
+                <td className="text-xs sm:text-sm">
+                  <div className="flex flex-col">
+                    <span>{formatTokenAmount(info.unlockedTokens)} / {formatTokenAmount(info.totalTokens)}</span>
+                    <span className="text-2xs opacity-70">{info.tokenSymbol}</span>
+                  </div>
+                </td>
+                <td>
+                  <span
+                    className={`badge badge-xs sm:badge-sm ${
+                      info.percentUnlocked >= 100
+                        ? "badge-success"
+                        : info.percentUnlocked > 0
+                          ? "badge-info"
+                          : "badge-warning"
+                    }`}
+                  >
+                    {info.percentUnlocked >= 100
+                      ? "Fully Unlocked"
+                      : info.percentUnlocked > 0
+                        ? "Unlocking"
+                        : "Locked"}
+                  </span>
+                </td>
+                <td>
+                  <button
+                    className="btn btn-xs sm:btn-sm btn-outline"
+                    onClick={() => {
+                      // Show release schedule
+                      const modal = document.getElementById(`modal-${info.projectId}`) as HTMLDialogElement;
+                      if (modal) modal.showModal();
+                    }}
+                  >
+                    <div className="flex items-center justify-center h-full">
+                      <span className="inline-block">Schedule</span>
+                    </div>
+                  </button>
+                  
+                  {/* Release Schedule Modal */}
+                  <dialog id={`modal-${info.projectId}`} className="modal modal-bottom sm:modal-middle">
+                    <div className="modal-box">
+                      <h3 className="font-bold text-lg mb-4">Token Release Schedule</h3>
+                      <p className="text-sm mb-4">Project: {info.projectTitle}</p>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="table table-sm w-full">
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Percentage</th>
+                              <th>Tokens</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {info.releaseSchedule.map((item, index) => (
+                              <tr key={index} className={item.isUnlocked ? "bg-success/10" : ""}>
+                                <td>{new Date(item.date * 1000).toLocaleDateString()}</td>
+                                <td>{item.percentage}%</td>
+                                <td>
+                                  <span className={item.isUnlocked ? "text-success" : ""}>
+                                    {formatTokenAmount(item.tokenAmount)}
+                                  </span>
+                                </td>
+                                <td>
+                                  <span
+                                    className={`badge badge-xs ${
+                                      item.isUnlocked ? "badge-success" : "badge-warning"
+                                    }`}
+                                  >
+                                    {item.isUnlocked ? "Unlocked" : "Locked"}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      <div className="modal-action">
+                        <button className="btn" onClick={() => (document.getElementById(`modal-${info.projectId}`) as HTMLDialogElement)?.close()}>
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  </dialog>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const DashboardPage = () => {
+  const {
+    address
+  } = useAccount();
+  const [activeTab, setActiveTab] = useState("projects");
+  const [projectsCount, setProjectsCount] = useState(0);
+  const [tasksCount, setTasksCount] = useState(0);
+  const [tokenBalance, setTokenBalance] = useState({ unlocked: 0, total: 0 });
+  const [investmentDistribution, setInvestmentDistribution] = useState<TagDistribution>({});
+  const [investmentStatusDistribution, setInvestmentStatusDistribution] = useState({
+    active: 0,
+    funded: 0,
+    failed: 0,
+    pending: 0
+  });
+  const [userInvestments, setUserInvestments] = useState<UserInvestment[]>([]);
   const [tokenReleaseInfo, setTokenReleaseInfo] = useState<TokenReleaseInfo[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [isLoadingTokenData, setIsLoadingTokenData] = useState(true);
+  const { readMethod } = useContractRead();
 
   // Get user contributions (project IDs)
   const getUserContributions = useCallback(async (userAddress: string): Promise<number[]> => {
@@ -613,9 +619,9 @@ const TokenReleaseSchedule = () => {
     };
   }, []);
 
-  useEffect(() => {
-    const fetchTokenReleaseInfo = async () => {
-      if (!address || isLoading) return;
+  // Unified function to fetch user investments data
+  const fetchUserInvestmentsData = useCallback(async () => {
+    if (!address) return;
       
       setIsLoadingData(true);
       
@@ -624,8 +630,142 @@ const TokenReleaseSchedule = () => {
         const projectIds = await getUserContributions(address);
         
         if (projectIds.length === 0) {
-          setTokenReleaseInfo([]);
+        setUserInvestments([]);
+        setInvestmentStatusDistribution({
+          active: 0,
+          funded: 0,
+          failed: 0,
+          pending: 0
+        });
+        setProjectsCount(0);
           setIsLoadingData(false);
+          return;
+        }
+      
+      setProjectsCount(projectIds.length);
+      
+      // Initialize status counters
+      let activeCount = 0;
+      let fundedCount = 0;
+      let failedCount = 0;
+      let pendingCount = 0;
+      
+      // Get detailed information for each project
+      const investmentsPromises = projectIds.map(async (projectId) => {
+        // Fetch project data, contribution amount, and funding info in parallel
+        const [project, contributionAmount, fundingInfo] = await Promise.all([
+          getProject(projectId),
+          getContribution(projectId, address),
+          getFundingInfo(projectId)
+        ]);
+        
+        // Determine project status
+        let status = "Unknown";
+        let fundingGoal = 0n;
+        let raisedAmount = 0n;
+        let fundingProgress = 0;
+        
+        if (fundingInfo) {
+          fundingGoal = fundingInfo.fundingGoal;
+          raisedAmount = fundingInfo.raisedAmount;
+          
+          // Calculate crowdfunding progress percentage
+          fundingProgress = fundingGoal > 0n 
+            ? Number((raisedAmount * 100n) / fundingGoal)
+            : 0;
+          
+          const now = new Date();
+          const endDate = new Date(fundingInfo.endTime * 1000);
+          
+          if (fundingInfo.hasMetFundingGoal) {
+            status = "Funded";
+            fundedCount++;
+          } else if (now > endDate) {
+            status = "Expired";
+            failedCount++;
+          } else {
+            status = "Active";
+            activeCount++;
+          }
+        }
+        
+        return {
+          projectId,
+          projectTitle: project ? project.title : `Project #${projectId}`,
+          contributionAmount,
+          status,
+          fundingGoal,
+          raisedAmount,
+          fundingProgress
+        };
+      });
+      
+      const investments = await Promise.all(investmentsPromises);
+      
+      // Update state with the unified data
+      setUserInvestments(investments);
+      setInvestmentStatusDistribution({
+        active: activeCount,
+        funded: fundedCount,
+        failed: failedCount,
+        pending: pendingCount
+      });
+      
+      // Calculate tag distribution from projects
+      const tagDistribution: TagDistribution = {};
+      
+      // Collect all projects to analyze tags
+      const projectsData = await Promise.all(
+        projectIds.map(async (projectId) => {
+          return await getProject(projectId);
+        })
+      );
+      
+      // Count occurrences of each tag
+      projectsData.forEach(project => {
+        if (project && project.tags && Array.isArray(project.tags)) {
+          project.tags.forEach(tag => {
+            if (tag) {
+              const normalizedTag = tag.trim().toLowerCase();
+              if (normalizedTag) {
+                tagDistribution[normalizedTag] = (tagDistribution[normalizedTag] || 0) + 1;
+              }
+            }
+          });
+        }
+      });
+      
+      // Update tag distribution state
+      setInvestmentDistribution(tagDistribution);
+      
+    } catch (error) {
+      console.error("Failed to fetch user investments data:", error);
+      // Set default values in case of error
+      setUserInvestments([]);
+      setInvestmentStatusDistribution({
+        active: 0,
+        funded: 0,
+        failed: 0,
+        pending: 0
+      });
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, [address, getUserContributions, getProject, getContribution, getFundingInfo]);
+
+  // Fetch token release information
+  const fetchTokenReleaseInfo = useCallback(async () => {
+    if (!address) return;
+    
+    setIsLoadingTokenData(true);
+    
+    try {
+      // Get user contributions (project IDs)
+      const projectIds = await getUserContributions(address);
+      
+      if (projectIds.length === 0) {
+        setTokenReleaseInfo([]);
+        setIsLoadingTokenData(false);
           return;
         }
         
@@ -665,14 +805,10 @@ const TokenReleaseSchedule = () => {
         console.error("Failed to fetch token release info:", error);
         setTokenReleaseInfo([]);
       } finally {
-        setIsLoadingData(false);
+      setIsLoadingTokenData(false);
       }
-    };
-    
-    fetchTokenReleaseInfo();
   }, [
     address, 
-    isLoading, 
     getUserContributions, 
     getProject, 
     getContribution, 
@@ -681,239 +817,46 @@ const TokenReleaseSchedule = () => {
     calculateTokenRelease
   ]);
   
-  if (isLoadingData) {
-    return (
-      <div className="flex justify-center items-center py-8">
-        <span className="loading loading-spinner loading-lg"></span>
-      </div>
-    );
-  }
-  
-  if (tokenReleaseInfo.length === 0) {
-    return (
-      <div className="py-6 text-center rounded-lg sm:py-8 bg-base-200/50">
-        <h3 className="mb-2 text-lg font-bold sm:text-xl">No token releases yet</h3>
-        <p className="mb-4 text-xs opacity-80 sm:text-sm">You don&apos;t have any tokens being released.</p>
-      </div>
-    );
-  }
-  
-  return (
-    <div className="space-y-4">
-      {/* Token unlock progress table */}
-      <div className="overflow-x-auto -mx-4 sm:mx-0">
-        <table className="table w-full table-sm sm:table-md">
-          <thead>
-            <tr>
-              <th className="text-xs sm:text-sm">Release Date</th>
-              <th className="text-xs sm:text-sm">Project</th>
-              <th className="text-xs sm:text-sm">Percentage</th>
-              <th className="text-xs sm:text-sm">Tokens</th>
-              <th className="text-xs sm:text-sm">Status</th>
-              <th className="text-xs sm:text-sm">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tokenReleaseInfo.flatMap((info) => 
-              info.releaseSchedule.map((scheduleItem, index) => {
-                const releaseDate = new Date(scheduleItem.date * 1000);
-                const now = new Date();
-                const daysLeft = Math.max(0, differenceInDays(releaseDate, now));
-                const isNextRelease = scheduleItem.isUnlocked === false && 
-                  info.releaseSchedule.findIndex(item => !item.isUnlocked) === index;
-                
-                // Only display next unlocked node and most recent unlocked node
-                const isRecentUnlocked = scheduleItem.isUnlocked && 
-                  (index === info.releaseSchedule.findIndex(item => item.isUnlocked) || 
-                   index === info.releaseSchedule.length - 1 || 
-                   index === info.releaseSchedule.findIndex(item => !item.isUnlocked) - 1);
-                  
-                if (!isNextRelease && !isRecentUnlocked) {
-                  return null;
-                }
-                
-                return (
-                  <tr key={`${info.projectId}-${index}`} className={isNextRelease ? "bg-base-200" : ""}>
-                    <td className="text-xs sm:text-sm">
-                      {scheduleItem.isUnlocked ? (
-                        <span className="text-success">{releaseDate.toLocaleDateString()}</span>
-                      ) : (
-                        <>
-                          <span className="font-medium">{daysLeft} days left</span>
-                          <div className="text-xs opacity-70">
-                            {releaseDate.toLocaleDateString()}
-                          </div>
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      <div className="font-medium text-xs sm:text-sm truncate max-w-[100px] sm:max-w-none">
-                        {info.projectTitle}
-                      </div>
-                      <div className="text-xs opacity-70">{info.tokenSymbol}</div>
-                    </td>
-                    <td className="text-xs sm:text-sm">
-                      {scheduleItem.percentage}%
-                      {index > 0 && (
-                        <div className="text-xs opacity-70">
-                          +{scheduleItem.percentage - info.releaseSchedule[index - 1].percentage}%
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-xs sm:text-sm">
-                      <div className="font-medium">
-                        {formatTokenAmount(scheduleItem.tokenAmount)}
-                      </div>
-                      {index > 0 && (
-                        <div className="text-xs opacity-70">
-                          +{formatTokenAmount(scheduleItem.tokenAmount - info.releaseSchedule[index - 1].tokenAmount)}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      {scheduleItem.isUnlocked ? (
-                        <span className="badge badge-xs sm:badge-sm badge-success">Released</span>
-                      ) : (
-                        <span className="badge badge-xs sm:badge-sm badge-outline">Scheduled</span>
-                      )}
-                    </td>
-                    <td>
-                      {isNextRelease && (
-                        <button
-                          className="btn btn-xs sm:btn-sm btn-primary"
-                          disabled={!scheduleItem.isUnlocked}
-                          onClick={() => {
-                            // Here you can add logic to claim tokens
-                            console.log(`Claim tokens for project ${info.projectId}`);
-                          }}
-                        >
-                          Claim Tokens
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              }).filter(Boolean)
-            )}
-          </tbody>
-        </table>
-      </div>
+  // Fetch user tasks data for summary cards
+  const fetchUserTasksSummary = useCallback(async () => {
+    if (!address) return;
+
+    try {
+      // Get user tasks
+      const userTaskIds = await readMethod("getUserTasks", [address]);
       
-      {/* Token distribution information cards */}
-      <div className="grid grid-cols-1 gap-4 mt-6 sm:grid-cols-3">
-        {tokenReleaseInfo.map((info) => (
-          <div key={`card-${info.projectId}`} className="card bg-base-200 shadow-sm">
-            <div className="p-4 card-body">
-              <h3 className="card-title text-sm">{info.projectTitle} Token Distribution</h3>
-              <div className="text-xs opacity-80 mb-2">{info.tokenSymbol}</div>
-              
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs">Your Allocation:</span>
-                  <span className="text-xs font-medium">{formatTokenAmount(info.totalTokens)} tokens</span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="text-xs">Unlocked:</span>
-                  <span className="text-xs font-medium">{formatTokenAmount(info.unlockedTokens)} tokens ({info.percentUnlocked}%)</span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="text-xs">Vesting Period:</span>
-                  <span className="text-xs font-medium">180 days</span>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span className="text-xs">Vesting End:</span>
-                  <span className="text-xs font-medium">
-                    {new Date(info.vestingEndDate * 1000).toLocaleDateString()}
-                  </span>
-                </div>
-                
-                <progress 
-                  className={`progress w-full mt-2 ${
-                    info.percentUnlocked >= 100 ? "progress-success" : "progress-primary"
-                  }`} 
-                  value={info.percentUnlocked} 
-                  max="100"
-                ></progress>
-                
-                {/* Display unlock schedule */}
-                <div className="mt-4">
-                  <div className="text-xs font-medium mb-2">Release Schedule:</div>
-                  <div className="space-y-1">
-                    {info.releaseSchedule
-                      .filter(item => item.percentage > 0) // Filter out 0% nodes
-                      .map((item, index) => (
-                        <div key={index} className="flex justify-between items-center text-xs">
-                          <span>{new Date(item.date * 1000).toLocaleDateString()} ({item.percentage}%)</span>
-                          <span className={item.isUnlocked ? "text-success" : ""}>
-                            {formatTokenAmount(item.tokenAmount)}
-                          </span>
-                        </div>
-                      ))
-                    }
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
+      if (userTaskIds && Array.isArray(userTaskIds)) {
+        setTasksCount(userTaskIds.length);
+      }
+    } catch (err) {
+      console.error("Failed to fetch tasks summary:", err);
+    }
+  }, [address, readMethod]);
 
-const DashboardPage = () => {
-  const {
-    address
-  } = useAccount();
-  const [activeTab, setActiveTab] = useState("projects");
-  const [projectsCount, setProjectsCount] = useState(0);
-  const [tasksCount, setTasksCount] = useState(0);
-  const [tokenBalance, setTokenBalance] = useState({ unlocked: 0, total: 0 });
-  const [investmentDistribution, setInvestmentDistribution] = useState({
-    defi: 0,
-    nft: 0,
-    gaming: 0,
-    infrastructure: 0,
-    social: 0
-  });
-  const [investmentStatusDistribution, setInvestmentStatusDistribution] = useState({
-    active: 0,
-    funded: 0,
-    failed: 0,
-    pending: 0
-  });
-  const { readMethod } = useContractRead();
-
-  // Fetch user investments data for summary cards
-  const fetchUserInvestmentsSummary = useCallback(async () => {
+  // Fetch user investments summary for token balance
+  const fetchUserTokenBalance = useCallback(async () => {
     if (!address) return;
 
     try {
       // Get user contributions (project IDs)
-      const projectIds = await readMethod("getUserContributions", [address]);
+      const projectIds = await getUserContributions(address);
       
       if (projectIds && Array.isArray(projectIds)) {
-        const numericIds = projectIds.map(id => Number(id));
-        setProjectsCount(numericIds.length);
-        
         // Calculate token allocations
         let unlockedTokens = 0;
         let totalUserTokens = 0;
         
-        for (const projectId of numericIds) {
+        for (const projectId of projectIds) {
           try {
             // Get funding info to calculate crowdfunding pool
-            const fundingInfo = await readMethod("getFundingInfo", [projectId]);
+            const fundingInfo = await getFundingInfo(projectId);
             if (!fundingInfo) continue;
             
-            const totalRaised = Number(fundingInfo[1]) / 1e18; // raisedAmount at index 1
-            const fundingEndTime = Number(fundingInfo[3]); // endTime at index 3
+            const totalRaised = Number(fundingInfo.raisedAmount) / 1e18;
+            const fundingEndTime = fundingInfo.endTime;
             
             // Get user's contribution for this project
-            const userContribution = await readMethod("getContribution", [projectId, address]);
+            const userContribution = await getContribution(projectId, address);
             if (!userContribution) continue;
             
             const userContributionAmount = Number(userContribution) / 1e18;
@@ -954,188 +897,17 @@ const DashboardPage = () => {
         });
       }
     } catch (err) {
-      console.error("Failed to fetch investment summary:", err);
+      console.error("Failed to fetch token balance:", err);
     }
-  }, [address, readMethod]);
+  }, [address, getUserContributions, getFundingInfo, getContribution]);
 
-  // Fetch user tasks data for summary cards
-  const fetchUserTasksSummary = useCallback(async () => {
-    if (!address) return;
-
-    try {
-      // Get user tasks
-      const userTaskIds = await readMethod("getUserTasks", [address]);
-      
-      if (userTaskIds && Array.isArray(userTaskIds)) {
-        setTasksCount(userTaskIds.length);
-      }
-    } catch (err) {
-      console.error("Failed to fetch tasks summary:", err);
-    }
-  }, [address, readMethod]);
-
-  // Get investment distribution data
-  const fetchInvestmentDistribution = useCallback(async () => {
-    if (!address) return;
-
-    try {
-      // In a real application, this data should be fetched from the contract
-      // Here we use mock data for demonstration
-      const projectIds = await readMethod("getUserContributions", [address]);
-      
-      if (projectIds && Array.isArray(projectIds)) {
-        // Initialize category counters
-        let defiCount = 0;
-        let nftCount = 0;
-        let gamingCount = 0;
-        let infrastructureCount = 0;
-        let socialCount = 0;
-        
-        // Iterate through user's projects
-        for (const projectId of projectIds) {
-          try {
-            // Get project details
-            const projectData = await readMethod("getProject", [projectId]);
-            
-            if (projectData) {
-              // Categorize project based on tags
-              const tags = projectData[4]; // Assume tags are in index 4
-              
-              if (tags && Array.isArray(tags)) {
-                // Categorize project based on tags
-                if (tags.some(tag => tag.toLowerCase().includes('defi'))) {
-                  defiCount++;
-                } else if (tags.some(tag => tag.toLowerCase().includes('nft'))) {
-                  nftCount++;
-                } else if (tags.some(tag => tag.toLowerCase().includes('game'))) {
-                  gamingCount++;
-                } else if (tags.some(tag => tag.toLowerCase().includes('infra'))) {
-                  infrastructureCount++;
-                } else if (tags.some(tag => tag.toLowerCase().includes('social'))) {
-                  socialCount++;
-                } else {
-                  // If no tags match, randomly assign to a category
-                  const randomCategory = Math.floor(Math.random() * 5);
-                  switch (randomCategory) {
-                    case 0: defiCount++; break;
-                    case 1: nftCount++; break;
-                    case 2: gamingCount++; break;
-                    case 3: infrastructureCount++; break;
-                    case 4: socialCount++; break;
-                  }
-                }
-              }
-            }
-          } catch (err) {
-            console.error(`Error processing project ${projectId}:`, err);
-          }
-        }
-        
-        // If there's no real data, generate some mock data
-        if (defiCount + nftCount + gamingCount + infrastructureCount + socialCount === 0) {
-          const total = projectIds.length || 5;
-          defiCount = Math.floor(total * 0.3);
-          nftCount = Math.floor(total * 0.2);
-          gamingCount = Math.floor(total * 0.25);
-          infrastructureCount = Math.floor(total * 0.15);
-          socialCount = total - defiCount - nftCount - gamingCount - infrastructureCount;
-        }
-        
-        setInvestmentDistribution({
-          defi: defiCount,
-          nft: nftCount,
-          gaming: gamingCount,
-          infrastructure: infrastructureCount,
-          social: socialCount
-        });
-      }
-    } catch (err) {
-      console.error("Failed to fetch investment distribution:", err);
-      // Set some default data
-      setInvestmentDistribution({
-        defi: 3,
-        nft: 2,
-        gaming: 4,
-        infrastructure: 1,
-        social: 2
-      });
-    }
-  }, [address, readMethod]);
-
-  // Get investment status distribution
-  const fetchInvestmentStatusDistribution = useCallback(async () => {
-    if (!address) return;
-
-    try {
-      // In a real application, this data should be fetched from the contract
-      const projectIds = await readMethod("getUserContributions", [address]);
-      
-      if (projectIds && Array.isArray(projectIds)) {
-        let activeCount = 0;
-        let fundedCount = 0;
-        let failedCount = 0;
-        let pendingCount = 0;
-        
-        for (const projectId of projectIds) {
-          try {
-            // Get project funding information
-            const fundingInfo = await readMethod("getFundingInfo", [projectId]);
-            
-            if (fundingInfo) {
-              const hasMetFundingGoal = fundingInfo[4]; // Assuming at index 4
-              const endTime = Number(fundingInfo[3]); // Assuming at index 3
-              const now = Math.floor(Date.now() / 1000);
-              
-              if (hasMetFundingGoal) {
-                fundedCount++;
-              } else if (now > endTime) {
-                failedCount++;
-              } else if (now < endTime) {
-                activeCount++;
-              } else {
-                pendingCount++;
-              }
-            }
-          } catch (err) {
-            console.error(`Error processing project status ${projectId}:`, err);
-          }
-        }
-        
-        // If there's no real data, generate some mock data
-        if (activeCount + fundedCount + failedCount + pendingCount === 0) {
-          const total = projectIds.length || 10;
-          activeCount = Math.floor(total * 0.4);
-          fundedCount = Math.floor(total * 0.3);
-          failedCount = Math.floor(total * 0.2);
-          pendingCount = total - activeCount - fundedCount - failedCount;
-        }
-        
-        setInvestmentStatusDistribution({
-          active: activeCount,
-          funded: fundedCount,
-          failed: failedCount,
-          pending: pendingCount
-        });
-      }
-    } catch (err) {
-      console.error("Failed to fetch investment status distribution:", err);
-      // Set some default data
-      setInvestmentStatusDistribution({
-        active: 4,
-        funded: 3,
-        failed: 2,
-        pending: 1
-      });
-    }
-  }, [address, readMethod]);
-
-  // Fetch summary data when component mounts
+  // Fetch all data when component mounts
   useEffect(() => {
-    fetchUserInvestmentsSummary();
+    fetchUserInvestmentsData();
     fetchUserTasksSummary();
-    fetchInvestmentDistribution();
-    fetchInvestmentStatusDistribution();
-  }, [fetchUserInvestmentsSummary, fetchUserTasksSummary, fetchInvestmentDistribution, fetchInvestmentStatusDistribution]);
+    fetchUserTokenBalance();
+    fetchTokenReleaseInfo();
+  }, [fetchUserInvestmentsData, fetchUserTasksSummary, fetchUserTokenBalance, fetchTokenReleaseInfo]);
 
   return (
     <div className="flex flex-col pt-20 min-h-screen sm:pt-24 animate-fade-in">
@@ -1187,138 +959,56 @@ const DashboardPage = () => {
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Left column - Investment Breakdown */}
-            <div className="md:col-span-1 flex flex-col">
+            <div className="md:col-span-1">
               {/* Investment Breakdown Card - Enhanced with charts */}
-              <div className="card bg-base-200/50 shadow-sm flex-grow flex flex-col">
-                <div className="card-body p-3 sm:p-4 flex flex-col justify-between">
+              <div className="card bg-base-200/50 shadow-sm h-full">
+                <div className="card-body p-3 sm:p-4 flex flex-col justify-between h-full">
                   <div>
-                    <h3 className="card-title text-base">Investment Breakdown</h3>
+                    <h3 className="card-title text-base">Investment Breakdown by Tags</h3>
                     
-                    {/* Added spacer to push content down */}
-                    <div className="flex-grow my-2"></div>
-                    
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-3 mt-4">
                       {/* Horizontal Bar Chart */}
                       <div className="space-y-3">
-                        {/* DeFi Projects */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-sm font-medium flex items-center gap-1.5">
-                              <span className="w-3 h-3 rounded-full bg-primary inline-block"></span>
-                              DeFi Projects
-                            </span>
-                            <span className="text-sm">{investmentDistribution.defi}</span>
-                          </div>
-                          <div className="w-full bg-base-300 rounded-full h-3 overflow-hidden">
-                            <div 
-                              className="bg-primary h-3 rounded-full shadow-inner" 
-                              style={{ 
-                                width: `${(investmentDistribution.defi / 
-                                  (investmentDistribution.defi + 
-                                  investmentDistribution.nft + 
-                                  investmentDistribution.gaming + 
-                                  investmentDistribution.infrastructure + 
-                                  investmentDistribution.social)) * 100}%` 
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                        
-                        {/* NFT Projects */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-sm font-medium flex items-center gap-1.5">
-                              <span className="w-3 h-3 rounded-full bg-secondary inline-block"></span>
-                              NFT Projects
-                            </span>
-                            <span className="text-sm">{investmentDistribution.nft}</span>
-                          </div>
-                          <div className="w-full bg-base-300 rounded-full h-3 overflow-hidden">
-                            <div 
-                              className="bg-secondary h-3 rounded-full shadow-inner" 
-                              style={{ 
-                                width: `${(investmentDistribution.nft / 
-                                  (investmentDistribution.defi + 
-                                  investmentDistribution.nft + 
-                                  investmentDistribution.gaming + 
-                                  investmentDistribution.infrastructure + 
-                                  investmentDistribution.social)) * 100}%` 
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                        
-                        {/* Gaming Projects */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-sm font-medium flex items-center gap-1.5">
-                              <span className="w-3 h-3 rounded-full bg-accent inline-block"></span>
-                              Gaming Projects
-                            </span>
-                            <span className="text-sm">{investmentDistribution.gaming}</span>
-                          </div>
-                          <div className="w-full bg-base-300 rounded-full h-3 overflow-hidden">
-                            <div 
-                              className="bg-accent h-3 rounded-full shadow-inner" 
-                              style={{ 
-                                width: `${(investmentDistribution.gaming / 
-                                  (investmentDistribution.defi + 
-                                  investmentDistribution.nft + 
-                                  investmentDistribution.gaming + 
-                                  investmentDistribution.infrastructure + 
-                                  investmentDistribution.social)) * 100}%` 
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                        
-                        {/* Infrastructure Projects */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-sm font-medium flex items-center gap-1.5">
-                              <span className="w-3 h-3 rounded-full bg-info inline-block"></span>
-                              Infrastructure
-                            </span>
-                            <span className="text-sm">{investmentDistribution.infrastructure}</span>
-                          </div>
-                          <div className="w-full bg-base-300 rounded-full h-3 overflow-hidden">
-                            <div 
-                              className="bg-info h-3 rounded-full shadow-inner" 
-                              style={{ 
-                                width: `${(investmentDistribution.infrastructure / 
-                                  (investmentDistribution.defi + 
-                                  investmentDistribution.nft + 
-                                  investmentDistribution.gaming + 
-                                  investmentDistribution.infrastructure + 
-                                  investmentDistribution.social)) * 100}%` 
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                        
-                        {/* Social Projects */}
-                        <div>
-                          <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-sm font-medium flex items-center gap-1.5">
-                              <span className="w-3 h-3 rounded-full bg-success inline-block"></span>
-                              Social Projects
-                            </span>
-                            <span className="text-sm">{investmentDistribution.social}</span>
-                          </div>
-                          <div className="w-full bg-base-300 rounded-full h-3 overflow-hidden">
-                            <div 
-                              className="bg-success h-3 rounded-full shadow-inner" 
-                              style={{ 
-                                width: `${(investmentDistribution.social / 
-                                  (investmentDistribution.defi + 
-                                  investmentDistribution.nft + 
-                                  investmentDistribution.gaming + 
-                                  investmentDistribution.infrastructure + 
-                                  investmentDistribution.social)) * 100}%` 
-                              }}
-                            ></div>
-                          </div>
-                        </div>
+                        {Object.keys(investmentDistribution).length === 0 ? (
+                          <div className="text-sm text-center py-4 opacity-70">No tag data available</div>
+                        ) : (
+                          <>
+                            {/* Calculate total for percentage */}
+                            {(() => {
+                              const totalTags = Object.values(investmentDistribution).reduce((sum, count) => sum + count, 0);
+                              
+                              // Get top 8 tags by count
+                              const topTags = Object.entries(investmentDistribution)
+                                .sort(([, countA], [, countB]) => countB - countA)
+                                .slice(0, 8);
+                              
+                              // Color palette for bars
+                              const colors = [
+                                "bg-primary", "bg-secondary", "bg-accent", 
+                                "bg-info", "bg-success", "bg-warning", 
+                                "bg-error", "bg-neutral"
+                              ];
+                              
+                              return topTags.map(([tag, count], index) => (
+                                <div key={tag}>
+                                  <div className="flex justify-between items-center mb-1.5">
+                                    <span className="text-sm font-medium flex items-center gap-1.5">
+                                      <span className={`w-3 h-3 rounded-full ${colors[index % colors.length]} inline-block`}></span>
+                                      {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                                    </span>
+                                    <span className="text-sm">{count}</span>
+                                  </div>
+                                  <div className="w-full bg-base-300 rounded-full h-3 overflow-hidden">
+                                    <div 
+                                      className={`${colors[index % colors.length]} h-3 rounded-full shadow-inner`}
+                                      style={{ width: `${(count / totalTags) * 100}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              ));
+                            })()}
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1345,10 +1035,11 @@ const DashboardPage = () => {
             </div>
 
             {/* Middle column - Stats Cards (moved from right) */}
-            <div className="md:col-span-1 space-y-3">
+            <div className="md:col-span-1 flex flex-col h-full">
+              <div className="grid grid-rows-3 gap-3 h-full">
               {/* Projects Backed Card */}
               <div className="card bg-gradient-to-br from-primary/80 to-primary text-primary-content shadow-sm">
-                <div className="card-body p-3">
+                  <div className="card-body p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center">
                     <div>
                       <h2 className="text-base font-medium opacity-80">Projects Backed</h2>
@@ -1373,7 +1064,7 @@ const DashboardPage = () => {
 
               {/* Tasks Participated Card */}
               <div className="card bg-gradient-to-br from-secondary/80 to-secondary text-secondary-content shadow-sm">
-                <div className="card-body p-3">
+                  <div className="card-body p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center">
                     <div>
                       <h2 className="text-base font-medium opacity-80">Tasks Participated</h2>
@@ -1398,7 +1089,7 @@ const DashboardPage = () => {
 
               {/* Token Balance Card */}
               <div className="card bg-gradient-to-br from-accent/80 to-accent text-accent-content shadow-sm">
-                <div className="card-body p-3">
+                  <div className="card-body p-3 flex flex-col justify-between">
                   <div className="flex justify-between items-center">
                     <div>
                       <h2 className="text-base font-medium opacity-80">Token Balance</h2>
@@ -1423,6 +1114,7 @@ const DashboardPage = () => {
                     <div className="flex justify-between text-xs mt-1 text-accent-content">
                       <span>Unlocked</span>
                       <span>{tokenBalance.total > 0 ? Math.round((tokenBalance.unlocked / tokenBalance.total) * 100) : 0}%</span>
+                      </div>
                     </div>
                   </div>
               </div>
@@ -1433,56 +1125,18 @@ const DashboardPage = () => {
             <div className="md:col-span-1">
               {/* Recent Activity Card */}
               <div className="card bg-base-200/50 shadow-sm h-full">
-                <div className="card-body p-3 sm:p-4">
+                <div className="card-body p-3 sm:p-4 flex flex-col h-full">
                   <h3 className="card-title text-sm">Recent Activity</h3>
-                  <div className="space-y-3 mt-1">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-success/20 flex items-center justify-center text-success">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <div className="space-y-3 mt-1 flex-grow">
+                    {/* Default state - No activity */}
+                    <div className="flex flex-col items-center justify-center h-full py-8">
+                      <div className="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center text-base-content/60 mb-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <div>
-                        <h4 className="font-medium text-xs">Task Started</h4>
-                        <p className="text-2xs opacity-70">Successfully started task </p>
-                        <p className="text-2xs opacity-50 mt-0.5">Just now</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-xs">Application Approved</h4>
-                        <p className="text-2xs opacity-70">Your application for Project was approved</p>
-                        <p className="text-2xs opacity-50 mt-0.5">1 min ago</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-info/20 flex items-center justify-center text-info">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-xs">Task Application</h4>
-                        <p className="text-2xs opacity-70">Successfully applied for task</p>
-                        <p className="text-2xs opacity-50 mt-0.5">1 min ago</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-accent">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-xs">Crowdfunding Participation</h4>
-                        <p className="text-2xs opacity-70">Invested 50000 USDC in Project</p>
-                        <p className="text-2xs opacity-50 mt-0.5">2 mins ago</p>
-                      </div>
+                      <h4 className="font-medium text-sm text-center">No Recent Activity</h4>
+                      <p className="text-xs opacity-70 text-center mt-1">Your activity will appear here once you start interacting with projects</p>
                     </div>
                   </div>
                 </div>
@@ -1544,15 +1198,20 @@ const DashboardPage = () => {
                       </svg>
                       My Investments
                     </h2>
-                    <Link href="/projects" className="btn btn-primary btn-sm gap-2">
+                    <Link href="/projects" className="btn btn-primary btn-sm">
+                      <div className="flex items-center justify-center gap-2 h-full">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
-                      Invest More
+                        <span className="inline-block">Invest More</span>
+                      </div>
                     </Link>
                   </div>
                   <div className="bg-base-200/30 rounded-xl p-1">
-                    <UserInvestmentsTable />
+                    <UserInvestmentsTable 
+                      userInvestments={userInvestments} 
+                      isLoadingData={isLoadingData} 
+                    />
                   </div>
                 </div>
 
@@ -1565,15 +1224,91 @@ const DashboardPage = () => {
                       </svg>
                       Token Release Schedule
                     </h2>
-                    <button className="btn btn-outline btn-sm gap-2">
+                    <button 
+                      className="btn btn-outline btn-sm"
+                      onClick={() => {
+                        const modal = document.getElementById('vesting-info-modal') as HTMLDialogElement;
+                        if (modal) modal.showModal();
+                      }}
+                    >
+                      <div className="flex items-center justify-center gap-2 h-full">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      How Vesting Works
+                        <span className="inline-block">How Vesting Works</span>
+                      </div>
                     </button>
+                    
+                    {/* Vesting Info Modal */}
+                    <dialog id="vesting-info-modal" className="modal modal-bottom sm:modal-middle">
+                      <div className="modal-box">
+                        <h3 className="font-bold text-lg mb-4">How Token Vesting Works</h3>
+                        
+                        <div className="space-y-4">
+                          <p className="text-sm">
+                            Token vesting is a process where tokens are gradually released over time according to a predetermined schedule.
+                          </p>
+                          
+                          <div className="bg-base-200 p-4 rounded-lg">
+                            <h4 className="font-semibold mb-2">Key Concepts:</h4>
+                            <ul className="list-disc list-inside space-y-2 text-sm">
+                              <li><span className="font-medium">Vesting Period:</span> The total time over which your tokens will be released.</li>
+                              <li><span className="font-medium">Release Schedule:</span> The specific dates and percentages of tokens to be unlocked.</li>
+                              <li><span className="font-medium">Cliff Period:</span> An initial period where no tokens are released, followed by the first release.</li>
+                            </ul>
+                          </div>
+                          
+                          <div className="bg-base-200 p-4 rounded-lg">
+                            <h4 className="font-semibold mb-2">Example Schedule:</h4>
+                            <div className="overflow-x-auto">
+                              <table className="table table-sm w-full">
+                                <thead>
+                                  <tr>
+                                    <th>Time</th>
+                                    <th>Release</th>
+                                    <th>Total Unlocked</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td>TGE (Token Generation Event)</td>
+                                    <td>10%</td>
+                                    <td>10%</td>
+                                  </tr>
+                                  <tr>
+                                    <td>3 months after TGE</td>
+                                    <td>15%</td>
+                                    <td>25%</td>
+                                  </tr>
+                                  <tr>
+                                    <td>6 months after TGE</td>
+                                    <td>25%</td>
+                                    <td>50%</td>
+                                  </tr>
+                                  <tr>
+                                    <td>12 months after TGE</td>
+                                    <td>50%</td>
+                                    <td>100%</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="modal-action">
+                          <button className="btn" onClick={() => (document.getElementById('vesting-info-modal') as HTMLDialogElement)?.close()}>
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    </dialog>
                   </div>
                   <div className="bg-base-200/30 rounded-xl p-1">
-                    <TokenReleaseSchedule />
+                    <TokenReleaseSchedule 
+                      tokenReleaseInfo={tokenReleaseInfo}
+                      isLoadingData={isLoadingTokenData}
+                    />
                   </div>
                 </div>
               </div>
@@ -1589,11 +1324,13 @@ const DashboardPage = () => {
                     </svg>
                     My Tasks
                   </h2>
-                  <Link href="/projects" className="btn btn-primary btn-sm gap-2">
+                  <Link href="/projects" className="btn btn-primary btn-sm">
+                    <div className="flex items-center justify-center gap-2 h-full">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
-                    Find Tasks
+                      <span className="inline-block">Find Tasks</span>
+                    </div>
                   </Link>
                 </div>
                 <div className="bg-base-200/30 rounded-xl p-1">
@@ -1609,3 +1346,4 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
+

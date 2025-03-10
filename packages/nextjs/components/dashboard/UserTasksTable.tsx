@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAccount } from "wagmi";
 import { formatDistanceToNow } from "date-fns";
 import { useContractRead } from "~~/hooks/contracts/useContractRead";
+import { useScaffoldWatchContractEvent } from "~~/hooks/scaffold-eth";
 
 // Task status enum
 enum TaskStatus {
@@ -103,11 +104,10 @@ const getTaskStatusStyle = (status: TaskStatus): string => {
 
 export const UserTasksTable = () => {
   const { address } = useAccount();
-  const { readMethod, isLoading: contractLoading } = useContractRead();
+  const { readMethod, isLoading: contractLoading, clearCache } = useContractRead();
   const [userTasks, setUserTasks] = useState<TaskData[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
 
   // Get user's associated task IDs
@@ -250,17 +250,6 @@ export const UserTasksTable = () => {
         setIsLoadingData(false);
       }
 
-      // Set timer to fetch data again after 30 seconds
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
-      }
-
-      fetchTimeoutRef.current = setTimeout(() => {
-        if (isMountedRef.current) {
-          fetchUserTasksData();
-        }
-      }, 30000); // 30 seconds
-
     } catch (err) {
       console.error("Failed to fetch user task data:", err);
       if (isMountedRef.current) {
@@ -280,11 +269,56 @@ export const UserTasksTable = () => {
 
     return () => {
       isMountedRef.current = false;
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
-      }
     };
   }, [address, fetchUserTasksData]);
+
+  // Monitor task assignment event
+  useScaffoldWatchContractEvent({
+    contractName: "Diamond",
+    eventName: "TaskAssigned",
+    onLogs: () => {
+      if (isMountedRef.current) {
+        clearCache();
+        fetchUserTasksData();
+      }
+    },
+  });
+
+  // Monitor task status update event
+  useScaffoldWatchContractEvent({
+    contractName: "Diamond",
+    eventName: "TaskUpdated",
+    onLogs: () => {
+      if (isMountedRef.current) {
+        clearCache();
+        fetchUserTasksData();
+      }
+    },
+  });
+
+  // Monitor task completion event
+  useScaffoldWatchContractEvent({
+    contractName: "Diamond",
+    eventName: "TaskCompleted",
+    onLogs: () => {
+      if (isMountedRef.current) {
+        clearCache();
+        fetchUserTasksData();
+      }
+    },
+  });
+
+  // Monitor task verification event
+  useScaffoldWatchContractEvent({
+    contractName: "Diamond",
+    eventName: "TaskVerified",
+    onLogs: () => {
+      if (isMountedRef.current) {
+        clearCache();
+        fetchUserTasksData();
+      }
+    },
+  });
 
   // Render loading state
   if (isLoadingData) {
@@ -298,11 +332,11 @@ export const UserTasksTable = () => {
   // Render error state
   if (error) {
     return (
-      <div className="alert alert-error">
-        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <span>{error}</span>
+      <div className="alert alert-error shadow-lg">
+        <div>
+          <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span>{error}</span>
+        </div>
       </div>
     );
   }
@@ -310,18 +344,17 @@ export const UserTasksTable = () => {
   // Render empty state
   if (userTasks.length === 0) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        <p>You don&apos;t have any associated tasks yet</p>
-        <Link href="/projects" className="btn btn-primary mt-4">
-          Browse Projects
-        </Link>
+      <div className="text-center py-8">
+        <p className="text-gray-500 dark:text-gray-400">No tasks found.</p>
       </div>
     );
   }
 
-  // Render task list
   return (
     <div className="overflow-x-auto">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">My Tasks</h2>
+      </div>
       <table className="table w-full">
         <thead>
           <tr>

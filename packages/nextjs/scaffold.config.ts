@@ -1,4 +1,4 @@
-import { monadTestnet, sonicBlazeTestnet } from "./utils/networks";
+import { sonicBlazeTestnet } from "./utils/networks";
 import * as chains from "viem/chains";
 
 export type ScaffoldConfig = {

@@ -12,8 +12,8 @@ const ScaffoldEthApp = ({ children }: { children: React.ReactNode }) => {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
-        <style>
-          {`
+        <style dangerouslySetInnerHTML={{
+          __html: `
             :root {
               --color-primary-rgb: 139, 92, 246;
               --color-secondary-rgb: 59, 130, 246;
@@ -29,8 +29,8 @@ const ScaffoldEthApp = ({ children }: { children: React.ReactNode }) => {
               transition-property: color, background-color, border-color;
               transition-duration: 0.3s;
             }
-          `}
-        </style>
+          `
+        }} />
       </head>
       <body>
         <ThemeProvider enableSystem>

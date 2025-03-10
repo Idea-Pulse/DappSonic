@@ -472,14 +472,14 @@ export function ProjectDetailsClient({ projectId }: { projectId: string }) {
     if (activeTab === "tasks" && taskCount && projectTasks.length === 0 && !isLoadingTasks) {
       fetchProjectTasks();
     }
-  }, [activeTab, taskCount, projectTasks.length, isLoadingTasks, fetchProjectTasks]);
+  }, [activeTab, taskCount, projectTasks.length, isLoadingTasks]);
 
   // Fetch claim data when funding info is available
   useEffect(() => {
     if (fundingInfo && address && !isLoadingData) {
       fetchClaimData();
     }
-  }, [fundingInfo, address, isLoadingData, fetchClaimData]);
+  }, [fundingInfo, address, isLoadingData]);
 
   if (isLoading || isLoadingData || !project) {
     return (
