@@ -275,7 +275,7 @@ export const UserTasksTable = () => {
   // Monitor task assignment event
   useScaffoldWatchContractEvent({
     contractName: "Diamond",
-    eventName: "TaskAssigned",
+    eventName: "TaskAssigned" as any,
     onLogs: () => {
       if (isMountedRef.current) {
         clearCache();
@@ -287,7 +287,7 @@ export const UserTasksTable = () => {
   // Monitor task status update event
   useScaffoldWatchContractEvent({
     contractName: "Diamond",
-    eventName: "TaskUpdated",
+    eventName: "TaskUpdated" as any,
     onLogs: () => {
       if (isMountedRef.current) {
         clearCache();
@@ -299,7 +299,7 @@ export const UserTasksTable = () => {
   // Monitor task completion event
   useScaffoldWatchContractEvent({
     contractName: "Diamond",
-    eventName: "TaskCompleted",
+    eventName: "TaskCompleted" as any,
     onLogs: () => {
       if (isMountedRef.current) {
         clearCache();
@@ -311,7 +311,7 @@ export const UserTasksTable = () => {
   // Monitor task verification event
   useScaffoldWatchContractEvent({
     contractName: "Diamond",
-    eventName: "TaskVerified",
+    eventName: "TaskVerified" as any,
     onLogs: () => {
       if (isMountedRef.current) {
         clearCache();
